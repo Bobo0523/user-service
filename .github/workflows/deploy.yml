@@ -91,18 +91,20 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_PEM_KEY }}
           script: |
-
+            set -e
+            cd /home/ubuntu
             echo "Stopping old container..."
 
-            docker stop springboot || true
-            docker rm springboot || true
+            sudo docker stop springboot || true
+            sudo docker rm springboot || true
 
             echo "Pull latest image..."
+            sudo docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
 
-            docker compose pull ${{ secrets.DOCKER_USERNAME }}/springboot-app:latest
+            sudo docker compose pull
 
             echo "Run new container..."
 
-            docker compose up -d 
+            sudo docker compose up -d 
 
             echo "Deploy Success!"
