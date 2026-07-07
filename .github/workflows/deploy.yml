@@ -99,14 +99,10 @@ jobs:
 
             echo "Pull latest image..."
 
-            docker pull ${{ secrets.DOCKER_USERNAME }}/springboot-app:latest
+            docker compose pull ${{ secrets.DOCKER_USERNAME }}/springboot-app:latest
 
             echo "Run new container..."
 
-            docker run -d \
-              --name springboot \
-              -p 8080:8080 \
-              --restart always \
-              ${{ secrets.DOCKER_USERNAME }}/springboot-app:latest
+            docker compose up -d 
 
             echo "Deploy Success!"
