@@ -4,3 +4,6 @@ spring:
     username: bobo
     password: 1qaz2wsx
     driver-class-name: org.postgresql.Driver
+  sql:
+    init:
+      mode: always
