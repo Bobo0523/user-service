@@ -15,10 +15,8 @@ public class SecurityConfig {
     @Value("${COGNITO_URI}")
     private String cognitoUri;
 
-    // 手动创建一个 JwtDecoder Bean，Spring Security 看到它就不会报错了
     @Bean
     public JwtDecoder jwtDecoder() {
-        // 明确告诉 Spring 去这个 Cognito 地址下载公钥进行 JWT 验证
         return JwtDecoders.fromIssuerLocation(cognitoUri);
     }
     @Bean
