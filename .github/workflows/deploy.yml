@@ -89,7 +89,7 @@ jobs:
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key: ${{ secrets.EC2_REM_KEY }}
           script: |
             # --- 阶段 A：自动化环境准备 (如果已装 Docker 会自动跳过) ---
             echo "🔥 检查并安装 Docker 环境..."
