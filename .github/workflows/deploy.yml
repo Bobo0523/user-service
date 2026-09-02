@@ -119,6 +119,6 @@ jobs:
             sudo docker pull ${{ secrets.DOCKER_USERNAME }}/user-service:latest
 
             echo "🚀 启动新容器，并注入刚才生成的 .env 配置文件..."
-            sudo docker run -d --name user-app -p 8080:8080 --env-file .env user-service:latest
+            sudo docker run -d --name user-app -p 8080:8080 --env-file .env ${{ secrets.DOCKER_USERNAME }}/user-service:lates
 
             echo "✅ 部署完美结束！"
