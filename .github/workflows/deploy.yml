@@ -108,10 +108,8 @@ jobs:
             
             # 使用 cat 结合 EOF 语法，直接在服务器上凭空写出一个 .env 文件
             # 里面的值可以从 GitHub Secrets 读，也可以直接写死
-            cat <<EOF > .env
-            SPRING_PROFILES_ACTIVE=prod
-            COGNITO_URI=https://cognito-idp.ap-southeast-2.amazonaws.com/你的_USER_POOL_ID
-
+            echo "SPRING_PROFILES_ACTIVE=prod" > .env
+            echo "COGNITO_URI=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_FntgOkEnY" >> .env
             # --- 阶段 C：构建与运行 ---
             echo "🧹 清理旧容器 (即使不存在也不会报错)..."
             sudo docker stop user-app || true
