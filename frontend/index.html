@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Weather Demo</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+<main class="container">
+
+    <h1>Weather Demo</h1>
+
+    <!-- Edit these two before opening the page -->
+    <script>
+        const API_BASE   = "http://34.229.150.172:8080";
+        const COGNITO    = {
+            region:   "us-east-1",
+            clientId: "6tu4b6ns1upjqp8bo8snf44jbv"
+        };
+    </script>
+
+    <!-- ============ PUBLIC: straight from S3, no token ============ -->
+    <article>
+        <header><strong>Historical trend</strong> — public data, no login required</header>
+        <canvas id="chart" height="120"></canvas>
+        <small id="chartNote">Loading…</small>
+    </article>
+
+    <!-- ============ PRIVATE: needs a verified token ============ -->
+    <article>
+        <header><strong>My alerts</strong> — requires login</header>
+
+        <div id="loginBox">
+            <input id="username" placeholder="email" autocomplete="username">
+            <input id="password" type="password" placeholder="password" autocomplete="current-password">
+            <button onclick="login()">Sign in</button>
+        </div>
+
+        <div id="userBox" hidden>
+            <p>Signed in as <strong id="who"></strong> <a href="#" onclick="logout()">(sign out)</a></p>
+
+            <form onsubmit="addSub(event)">
+                <div class="grid">
+                    <input id="city" placeholder="City, e.g. Hamilton" required>
+                    <input id="tempAbove" type="number" step="0.5" placeholder="Alert when temp above (°C)">
+                    <button type="submit">Save</button>
+                </div>
+            </form>
+
+            <table>
+                <thead><tr><th>City</th><th>Alert above</th><th>Created</th></tr></thead>
+                <tbody id="subs"></tbody>
+            </table>
+        </div>
+
+        <small id="authNote"></small>
+    </article>
+
+    <script>
+        let token = sessionStorage.getItem("idToken");
+
+        /* ---------- public data: no Authorization header ---------- */
+        async function loadHistory() {
+            const note = document.getElementById("chartNote");
+            try {
+                const res = await fetch(`${API_BASE}/api/public/history`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                // One point per year keeps the chart readable.
+                const byYear = {};
+                data.monthly.forEach(m => {
+                    if (m.tmax_avg == null) return;
+                    const y = m.month.slice(0, 4);
+                    (byYear[y] = byYear[y] || []).push(m.tmax_avg);
+                });
+                const years = Object.keys(byYear).sort();
+                const avgs  = years.map(y => {
+                    const v = byYear[y];
+                    return +(v.reduce((a, b) => a + b, 0) / v.length).toFixed(2);
+                });
+
+                new Chart(document.getElementById("chart"), {
+                    type: "line",
+                    data: { labels: years,
+                        datasets: [{ label: "Average daily maximum (°C)", data: avgs, tension: 0.3 }] },
+                    options: { plugins: { legend: { display: true } } }
+                });
+                note.textContent = `Station ${data.station} · ${data.monthly.length} months · generated ${data.generated_at.slice(0,10)}`;
+            } catch (e) {
+                note.textContent = `Could not load history: ${e.message}`;
+            }
+        }
+
+        /* ---------- login: talks to Cognito directly ---------- */
+        async function login() {
+            const note = document.getElementById("authNote");
+            note.textContent = "Signing in…";
+            try {
+                const res = await fetch(`https://cognito-idp.${COGNITO.region}.amazonaws.com/`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-amz-json-1.1",
+                        "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth"
+                    },
+                    body: JSON.stringify({
+                        AuthFlow: "USER_PASSWORD_AUTH",
+                        ClientId: COGNITO.clientId,
+                        AuthParameters: {
+                            USERNAME: document.getElementById("username").value,
+                            PASSWORD: document.getElementById("password").value
+                        }
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.message || "login failed");
+
+                // The backend validates this token's signature against Cognito's public keys.
+                token = data.AuthenticationResult.IdToken;
+                sessionStorage.setItem("idToken", token);
+                note.textContent = "";
+                showUser();
+            } catch (e) {
+                note.textContent = `Login failed: ${e.message}`;
+            }
+        }
+
+        function logout() {
+            sessionStorage.removeItem("idToken");
+            token = null;
+            document.getElementById("loginBox").hidden = false;
+            document.getElementById("userBox").hidden = true;
+        }
+
+        function showUser() {
+            const claims = JSON.parse(atob(token.split(".")[1]));
+            document.getElementById("who").textContent = claims.email || claims["cognito:username"];
+            document.getElementById("loginBox").hidden = true;
+            document.getElementById("userBox").hidden = false;
+            loadSubs();
+        }
+
+        /* ---------- private data: token goes in every request ---------- */
+        async function loadSubs() {
+            const res = await fetch(`${API_BASE}/api/subscriptions`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.status === 401) { document.getElementById("authNote").textContent = "Session expired"; return logout(); }
+            const rows = await res.json();
+            document.getElementById("subs").innerHTML = rows.map(r =>
+                `<tr><td>${r.city}</td><td>${r.tempAbove ?? "-"}</td><td>${(r.createdAt||"").slice(0,10)}</td></tr>`
+            ).join("") || `<tr><td colspan="3">No alerts yet</td></tr>`;
+        }
+
+        async function addSub(ev) {
+            ev.preventDefault();
+            await fetch(`${API_BASE}/api/subscriptions`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    city: document.getElementById("city").value,
+                    tempAbove: document.getElementById("tempAbove").value || null
+                })
+            });
+            document.getElementById("city").value = "";
+            document.getElementById("tempAbove").value = "";
+            loadSubs();
+        }
+
+        loadHistory();
+        if (token) showUser();
+    </script>
+</main>
+</body>
+</html>
