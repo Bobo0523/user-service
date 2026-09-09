@@ -2,6 +2,7 @@ package org.example.Controller;
 
 import org.example.Service.HistoryService;
 import org.example.Service.SubscriptionService;
+import org.example.Service.CurrentWeatherService;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -16,10 +17,24 @@ public class WeatherController {
 
     private final HistoryService history;
     private final SubscriptionService subscriptions;
+    private final CurrentWeatherService current;
 
-    public WeatherController(HistoryService history, SubscriptionService subscriptions) {
+    public WeatherController(HistoryService history,
+                             SubscriptionService subscriptions,
+                             CurrentWeatherService current) {
         this.history = history;
         this.subscriptions = subscriptions;
+        this.current = current;
+    }
+
+    /**
+     * PUBLIC. Latest reading for every supported city. Doubles as the list the
+     * frontend uses to populate its city selector, so the options can never
+     * drift from what the ingestion job actually covers.
+     */
+    @GetMapping("/api/public/current")
+    public List<Map<String, Object>> currentWeather() {
+        return current.listAll();
     }
 
     /**
@@ -47,6 +62,10 @@ public class WeatherController {
         String city = (String) body.get("city");
         if (city == null || city.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "city is required"));
+        }
+        if (!current.isSupported(city)) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "unsupported city: " + city));
         }
         Double tempAbove = body.get("tempAbove") == null
                 ? null : Double.valueOf(body.get("tempAbove").toString());

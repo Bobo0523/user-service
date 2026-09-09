@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Weather Demo</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
 <body>
 <main class="container">
@@ -14,18 +13,43 @@
 
     <!-- Edit these two before opening the page -->
     <script>
-        const API_BASE   = "http://34.229.150.172:8080";
+        const API_BASE   = "http://YOUR_EC2_IP:8080";
         const COGNITO    = {
             region:   "us-east-1",
-            clientId: "6tu4b6ns1upjqp8bo8snf44jbv"
+            clientId: "YOUR_APP_CLIENT_ID"
         };
     </script>
 
     <!-- ============ PUBLIC: straight from S3, no token ============ -->
     <article>
-        <header><strong>Historical trend</strong> — public data, no login required</header>
-        <canvas id="chart" height="120"></canvas>
+        <header><strong>Current conditions</strong> — public, no login required</header>
+        <small id="currentNote">Loading…</small>
+        <table>
+            <thead>
+            <tr><th>City</th><th>Temp (&deg;C)</th><th>Humidity (%)</th>
+                <th>Rain (mm)</th><th>Wind (km/h)</th><th>Observed</th></tr>
+            </thead>
+            <tbody id="currentRows"></tbody>
+        </table>
+    </article>
+
+    <article>
+        <header><strong>Historical data</strong> — public, no login required</header>
         <small id="chartNote">Loading…</small>
+        <div style="max-height:22rem;overflow:auto">
+            <table>
+                <thead>
+                <tr>
+                    <th>Month</th>
+                    <th>Avg max (&deg;C)</th>
+                    <th>Avg min (&deg;C)</th>
+                    <th>Avg rain (mm)</th>
+                    <th>Days</th>
+                </tr>
+                </thead>
+                <tbody id="historyRows"></tbody>
+            </table>
+        </div>
     </article>
 
     <!-- ============ PRIVATE: needs a verified token ============ -->
@@ -33,9 +57,13 @@
         <header><strong>My alerts</strong> — requires login</header>
 
         <div id="loginBox">
-            <input id="username" placeholder="email" autocomplete="username">
-            <input id="password" type="password" placeholder="password" autocomplete="current-password">
-            <button onclick="login()">Sign in</button>
+            <label for="username">Email
+                <input id="username" placeholder="you@example.com" autocomplete="username">
+            </label>
+            <label for="password">Password
+                <input id="password" type="password" autocomplete="current-password">
+            </label>
+            <button type="button" onclick="login()">Sign in</button>
         </div>
 
         <div id="userBox" hidden>
@@ -43,9 +71,15 @@
 
             <form onsubmit="addSub(event)">
                 <div class="grid">
-                    <input id="city" placeholder="City, e.g. Hamilton" required>
-                    <input id="tempAbove" type="number" step="0.5" placeholder="Alert when temp above (°C)">
-                    <button type="submit">Save</button>
+                    <label for="city">City
+                        <select id="city" required></select>
+                    </label>
+                    <label for="tempAbove">Alert above (°C)
+                        <input id="tempAbove" type="number" step="0.5" placeholder="25">
+                    </label>
+                    <label for="saveBtn">&nbsp;
+                        <button id="saveBtn" type="submit">Save</button>
+                    </label>
                 </div>
             </form>
 
@@ -62,33 +96,61 @@
         let token = sessionStorage.getItem("idToken");
 
         /* ---------- public data: no Authorization header ---------- */
+        async function loadCurrent() {
+            const note = document.getElementById("currentNote");
+            const res = await fetch(`${API_BASE}/api/public/current`);
+            if (!res.ok) {
+                note.textContent = `Could not load current conditions: HTTP ${res.status}`;
+                return;
+            }
+            const rows = await res.json();
+
+            document.getElementById("currentRows").innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.city}</td>
+      <td>${r.temperature ?? "-"}</td>
+      <td>${r.humidity ?? "-"}</td>
+      <td>${r.precipitation ?? "-"}</td>
+      <td>${r.windSpeed ?? "-"}</td>
+      <td>${(r.observedAt ?? "").replace("T", " ")}</td>
+    </tr>`).join("");
+
+            // The same response defines which cities can be subscribed to, so the
+            // selector can never offer a city the ingestion job does not cover.
+            document.getElementById("city").innerHTML =
+                rows.map(r => `<option value="${r.city}">${r.city}</option>`).join("");
+
+            note.textContent = `${rows.length} cities · data by Open-Meteo.com`;
+        }
+
         async function loadHistory() {
             const note = document.getElementById("chartNote");
             try {
                 const res = await fetch(`${API_BASE}/api/public/history`);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                if (!res.ok) {
+                    note.textContent = `Could not load history: HTTP ${res.status}`;
+                    return;
+                }
                 const data = await res.json();
+                const rows = data.monthly;
 
-                // One point per year keeps the chart readable.
-                const byYear = {};
-                data.monthly.forEach(m => {
-                    if (m.tmax_avg == null) return;
-                    const y = m.month.slice(0, 4);
-                    (byYear[y] = byYear[y] || []).push(m.tmax_avg);
-                });
-                const years = Object.keys(byYear).sort();
-                const avgs  = years.map(y => {
-                    const v = byYear[y];
-                    return +(v.reduce((a, b) => a + b, 0) / v.length).toFixed(2);
-                });
+                document.getElementById("historyRows").innerHTML = rows.map(m => `
+      <tr>
+        <td>${m.month}</td>
+        <td>${m.tmax_avg ?? "-"}</td>
+        <td>${m.tmin_avg ?? "-"}</td>
+        <td>${m.prcp_avg ?? "-"}</td>
+        <td>${m.days}</td>
+      </tr>`).join("");
 
-                new Chart(document.getElementById("chart"), {
-                    type: "line",
-                    data: { labels: years,
-                        datasets: [{ label: "Average daily maximum (°C)", data: avgs, tension: 0.3 }] },
-                    options: { plugins: { legend: { display: true } } }
-                });
-                note.textContent = `Station ${data.station} · ${data.monthly.length} months · generated ${data.generated_at.slice(0,10)}`;
+                const first = rows[0]?.month ?? "-";
+                const last  = rows[rows.length - 1]?.month ?? "-";
+                const where = data.station_name
+                    ? `${data.station_name} (${data.latitude}, ${data.longitude})`
+                    : `Station ${data.station}`;
+                note.textContent =
+                    `${where} · ${rows.length} months · ${first} to ${last} · ` +
+                    `source: NOAA GHCN-Daily via S3`;
             } catch (e) {
                 note.textContent = `Could not load history: ${e.message}`;
             }
@@ -115,7 +177,10 @@
                     })
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.message || "login failed");
+                if (!res.ok) {
+                    note.textContent = `Login failed: ${data.message || res.status}`;
+                    return;
+                }
 
                 // The backend validates this token's signature against Cognito's public keys.
                 token = data.AuthenticationResult.IdToken;
@@ -139,7 +204,9 @@
             document.getElementById("who").textContent = claims.email || claims["cognito:username"];
             document.getElementById("loginBox").hidden = true;
             document.getElementById("userBox").hidden = false;
-            loadSubs();
+            loadSubs().catch(e => {
+                document.getElementById("authNote").textContent = `Could not load alerts: ${e.message}`;
+            });
         }
 
         /* ---------- private data: token goes in every request ---------- */
@@ -156,7 +223,7 @@
 
         async function addSub(ev) {
             ev.preventDefault();
-            await fetch(`${API_BASE}/api/subscriptions`, {
+            const res = await fetch(`${API_BASE}/api/subscriptions`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                 body: JSON.stringify({
@@ -164,12 +231,22 @@
                     tempAbove: document.getElementById("tempAbove").value || null
                 })
             });
-            document.getElementById("city").value = "";
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                document.getElementById("authNote").textContent = err.error || `Save failed (${res.status})`;
+                return;
+            }
+            document.getElementById("authNote").textContent = "";
             document.getElementById("tempAbove").value = "";
-            loadSubs();
+            await loadSubs();
         }
 
-        loadHistory();
+        loadCurrent().catch(e => {
+            document.getElementById("currentNote").textContent = `Could not load current conditions: ${e.message}`;
+        });
+        loadHistory().catch(e => {
+            document.getElementById("chartNote").textContent = `Could not load history: ${e.message}`;
+        });
         if (token) showUser();
     </script>
 </main>
