@@ -84,6 +84,9 @@ jobs:
  
             echo "SPRING_PROFILES_ACTIVE=prod" > .env
             echo "COGNITO_URI=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_FntgOkEnY" >> .env
+            echo "APP_HISTORY_BUCKET=weather-app-data-demo" >> .env
+            echo "APP_SUBSCRIPTIONS_TABLE=weather-subscriptions" >> .env
+            echo "APP_CURRENT_TABLE=weather-current" >> .env
             
             sudo docker stop user-app || true
             sudo docker rm user-app || true
