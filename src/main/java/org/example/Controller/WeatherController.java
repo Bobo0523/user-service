@@ -1,8 +1,9 @@
 package org.example.Controller;
 
+import org.example.Service.AlertSubscriptionService;
+import org.example.Service.CurrentWeatherService;
 import org.example.Service.HistoryService;
 import org.example.Service.SubscriptionService;
-import org.example.Service.CurrentWeatherService;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -18,13 +19,16 @@ public class WeatherController {
     private final HistoryService history;
     private final SubscriptionService subscriptions;
     private final CurrentWeatherService current;
+    private final AlertSubscriptionService alerts;
 
     public WeatherController(HistoryService history,
                              SubscriptionService subscriptions,
-                             CurrentWeatherService current) {
+                             CurrentWeatherService current,
+                             AlertSubscriptionService alerts) {
         this.history = history;
         this.subscriptions = subscriptions;
         this.current = current;
+        this.alerts = alerts;
     }
 
     /**
@@ -63,6 +67,8 @@ public class WeatherController {
         if (city == null || city.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "city is required"));
         }
+        // Never trust the client's list: a city with no ingested weather would
+        // save fine and then silently never trigger an alert.
         if (!current.isSupported(city)) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "unsupported city: " + city));
@@ -70,7 +76,20 @@ public class WeatherController {
         Double tempAbove = body.get("tempAbove") == null
                 ? null : Double.valueOf(body.get("tempAbove").toString());
 
-        subscriptions.save(jwt.getSubject(), city, tempAbove);
-        return ResponseEntity.ok(Map.of("status", "saved"));
+        String email = jwt.getClaimAsString("email");
+        subscriptions.save(jwt.getSubject(), email, city, tempAbove);
+
+        // Sign the address up for alerts on first save. AWS sends a
+        // confirmation email that the user has to click once.
+        AlertSubscriptionService.State state = alerts.ensureSubscribed(jwt.getSubject(), email);
+
+        return ResponseEntity.ok(Map.of(
+                "status", "saved",
+                "alertDelivery", state.name(),
+                "message", switch (state) {
+                    case PENDING -> "Check " + email + " and confirm the subscription to receive alerts.";
+                    case ACTIVE -> "Alerts will be emailed to " + email + ".";
+                    case DISABLED -> "Saved, but alert delivery is not configured.";
+                }));
     }
 }

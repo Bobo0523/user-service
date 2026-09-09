@@ -16,7 +16,7 @@ import java.util.Map;
 
 /**
  * Per-user alert preferences.
-
+ *
  * Every method takes the userId that was extracted from the verified JWT, and
  * uses it as the partition key. A user can only ever touch their own rows -
  * the isolation is enforced here in application code, not by IAM.
@@ -26,7 +26,7 @@ public class SubscriptionService {
 
     private final DynamoDbClient db = DynamoDbClient.create();
 
-    @Value("${app.subscriptions-table}")
+    @Value("${app.subscriptions-table:weather-subscriptions}")
     private String table;
 
     public List<Map<String, Object>> listForUser(String userId) {
@@ -43,15 +43,19 @@ public class SubscriptionService {
             row.put("city", str(item.get("city")));
             row.put("tempAbove", num(item.get("tempAbove")));
             row.put("createdAt", str(item.get("createdAt")));
+            row.put("email", str(item.get("email")));
             out.add(row);
         }
         return out;
     }
 
-    public void save(String userId, String city, Double tempAbove) {
+    public void save(String userId, String email, String city, Double tempAbove) {
         Map<String, AttributeValue> item = new HashMap<>();
         item.put("userId", AttributeValue.builder().s(userId).build());
         item.put("city", AttributeValue.builder().s(city).build());
+        if (email != null && !email.isBlank()) {
+            item.put("email", AttributeValue.builder().s(email).build());
+        }
         if (tempAbove != null) {
             item.put("tempAbove", AttributeValue.builder().n(tempAbove.toString()).build());
         }

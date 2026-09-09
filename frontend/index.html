@@ -11,12 +11,11 @@
 
     <h1>Weather Demo</h1>
 
-    <!-- Edit these two before opening the page -->
     <script>
-        const API_BASE   = "http://YOUR_EC2_IP:8080";
+        const API_BASE = "https://c804hixg4i.execute-api.us-east-1.amazonaws.com/test";
         const COGNITO    = {
             region:   "us-east-1",
-            clientId: "YOUR_APP_CLIENT_ID"
+            clientId: "6tu4b6ns1upjqp8bo8snf44jbv"
         };
     </script>
 
@@ -63,7 +62,18 @@
             <label for="password">Password
                 <input id="password" type="password" autocomplete="current-password">
             </label>
-            <button type="button" onclick="login()">Sign in</button>
+            <div class="grid">
+                <button type="button" onclick="login()">Sign in</button>
+                <button type="button" class="secondary" onclick="register()">Create account</button>
+            </div>
+        </div>
+
+        <div id="confirmBox" hidden>
+            <p>We emailed a confirmation code to <strong id="confirmTarget"></strong>.</p>
+            <label for="code">Confirmation code
+                <input id="code" inputmode="numeric" placeholder="123456">
+            </label>
+            <button type="button" onclick="confirmSignUp()">Confirm and sign in</button>
         </div>
 
         <div id="userBox" hidden>
@@ -156,46 +166,91 @@
             }
         }
 
+        /* ---------- Cognito calls: same endpoint, different X-Amz-Target ---------- */
+        async function cognito(action, body) {
+            const res = await fetch(`https://cognito-idp.${COGNITO.region}.amazonaws.com/`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-amz-json-1.1",
+                    "X-Amz-Target": `AWSCognitoIdentityProviderService.${action}`
+                },
+                body: JSON.stringify({ ClientId: COGNITO.clientId, ...body })
+            });
+            const data = await res.json().catch(() => ({}));
+            return { ok: res.ok, data };
+        }
+
+        async function register() {
+            const note = document.getElementById("authNote");
+            const email = document.getElementById("username").value;
+            const password = document.getElementById("password").value;
+            note.textContent = "Creating account…";
+
+            const { ok, data } = await cognito("SignUp", {
+                Username: email,
+                Password: password,
+                UserAttributes: [{ Name: "email", Value: email }]
+            });
+
+            if (!ok) {
+                note.textContent = `Sign up failed: ${data.message || "unknown error"}`;
+                return;
+            }
+            note.textContent = "";
+            document.getElementById("confirmTarget").textContent = email;
+            document.getElementById("loginBox").hidden = true;
+            document.getElementById("confirmBox").hidden = false;
+        }
+
+        async function confirmSignUp() {
+            const note = document.getElementById("authNote");
+            note.textContent = "Confirming…";
+
+            const { ok, data } = await cognito("ConfirmSignUp", {
+                Username: document.getElementById("username").value,
+                ConfirmationCode: document.getElementById("code").value
+            });
+
+            if (!ok) {
+                note.textContent = `Confirmation failed: ${data.message || "unknown error"}`;
+                return;
+            }
+            document.getElementById("confirmBox").hidden = true;
+            document.getElementById("loginBox").hidden = false;
+            note.textContent = "Account confirmed. Signing you in…";
+            await login();
+        }
+
         /* ---------- login: talks to Cognito directly ---------- */
         async function login() {
             const note = document.getElementById("authNote");
             note.textContent = "Signing in…";
-            try {
-                const res = await fetch(`https://cognito-idp.${COGNITO.region}.amazonaws.com/`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/x-amz-json-1.1",
-                        "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth"
-                    },
-                    body: JSON.stringify({
-                        AuthFlow: "USER_PASSWORD_AUTH",
-                        ClientId: COGNITO.clientId,
-                        AuthParameters: {
-                            USERNAME: document.getElementById("username").value,
-                            PASSWORD: document.getElementById("password").value
-                        }
-                    })
-                });
-                const data = await res.json();
-                if (!res.ok) {
-                    note.textContent = `Login failed: ${data.message || res.status}`;
-                    return;
-                }
 
-                // The backend validates this token's signature against Cognito's public keys.
-                token = data.AuthenticationResult.IdToken;
-                sessionStorage.setItem("idToken", token);
-                note.textContent = "";
-                showUser();
-            } catch (e) {
-                note.textContent = `Login failed: ${e.message}`;
+            const { ok, data } = await cognito("InitiateAuth", {
+                AuthFlow: "USER_PASSWORD_AUTH",
+                AuthParameters: {
+                    USERNAME: document.getElementById("username").value,
+                    PASSWORD: document.getElementById("password").value
+                }
+            });
+
+            if (!ok) {
+                note.textContent = `Login failed: ${data.message || "unknown error"}`;
+                return;
             }
+
+            // The backend validates this token's signature against Cognito's public keys.
+            token = data.AuthenticationResult.IdToken;
+            sessionStorage.setItem("idToken", token);
+            note.textContent = "";
+            showUser();
         }
 
         function logout() {
             sessionStorage.removeItem("idToken");
             token = null;
             document.getElementById("loginBox").hidden = false;
+            document.getElementById("confirmBox").hidden = true;
             document.getElementById("userBox").hidden = true;
         }
 
@@ -236,7 +291,9 @@
                 document.getElementById("authNote").textContent = err.error || `Save failed (${res.status})`;
                 return;
             }
-            document.getElementById("authNote").textContent = "";
+            const body = await res.json().catch(() => ({}));
+            // PENDING means AWS just emailed a confirmation link the user must click once.
+            document.getElementById("authNote").textContent = body.message || "";
             document.getElementById("tempAbove").value = "";
             await loadSubs();
         }
