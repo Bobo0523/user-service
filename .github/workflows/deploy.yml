@@ -110,6 +110,10 @@ jobs:
             # 里面的值可以从 GitHub Secrets 读，也可以直接写死
             echo "SPRING_PROFILES_ACTIVE=prod" > .env
             echo "COGNITO_URI=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_FntgOkEnY" >> .env
+            echo "APP_HISTORY_BUCKET=weather-app-data-demo" >> .env
+            echo "APP_SUBSCRIPTIONS_TABLE=weather-subscriptions" >> .env
+            echo "APP_CURRENT_TABLE=weather-current" >> .env
+            
             # --- 阶段 C：构建与运行 ---
             echo "🧹 清理旧容器 (即使不存在也不会报错)..."
             sudo docker stop user-app || true
