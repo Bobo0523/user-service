@@ -113,6 +113,7 @@ jobs:
             echo "APP_HISTORY_BUCKET=weather-app-data-demo" >> .env
             echo "APP_SUBSCRIPTIONS_TABLE=weather-subscriptions" >> .env
             echo "APP_CURRENT_TABLE=weather-current" >> .env
+            echo "APP_ALERT_TOPIC_ARN=arn:aws:sns:us-east-1:543035740737:weather-alerts" >> .env
             
             # --- 阶段 C：构建与运行 ---
             echo "🧹 清理旧容器 (即使不存在也不会报错)..."
