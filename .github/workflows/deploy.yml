@@ -87,8 +87,9 @@ jobs:
             echo "APP_HISTORY_BUCKET=weather-app-data-demo" >> .env
             echo "APP_SUBSCRIPTIONS_TABLE=weather-subscriptions" >> .env
             echo "APP_CURRENT_TABLE=weather-current" >> .env
-            echo "COGNITO_CONFIDENTIAL_CLIENT_ID=<Id>" >> .env
-            echo "COGNITO_CONFIDENTIAL_CLIENT_SECRET=<Secret>" >> .env
+            echo "COGNITO_CONFIDENTIAL_CLIENT_ID=${{ vars.COGNITO_CONFIDENTIAL_CLIENT_ID }}" >> .env
+            echo "COGNITO_CONFIDENTIAL_CLIENT_SECRET=${{ secrets.COGNITO_CONFIDENTIAL_CLIENT_SECRET }}" >> .env
+            
             
             sudo docker stop user-app || true
             sudo docker rm user-app || true
