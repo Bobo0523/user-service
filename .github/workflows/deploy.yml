@@ -3,7 +3,6 @@ name: Spring Boot CI/CD
 on:
   push:
     branches:
-      - main
       - cognito
 jobs:
 
