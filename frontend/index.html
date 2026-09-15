@@ -19,9 +19,8 @@
         };
     </script>
 
-    <!-- ============ PUBLIC: straight from S3, no token ============ -->
     <article>
-        <header><strong>Current conditions</strong> — public, no login required</header>
+        <header><strong>Current conditions</strong></header>
         <small id="currentNote">Loading…</small>
         <table>
             <thead>
@@ -33,7 +32,7 @@
     </article>
 
     <article>
-        <header><strong>Historical data</strong> — public, no login required</header>
+        <header><strong>Historical data</strong></header>
         <small id="chartNote">Loading…</small>
         <div style="max-height:22rem;overflow:auto">
             <table>
@@ -53,7 +52,7 @@
 
     <!-- ============ PRIVATE: needs a verified token ============ -->
     <article>
-        <header><strong>My alerts</strong> — requires login</header>
+        <header><strong>My alerts</strong></header>
 
         <div id="loginBox">
             <label for="username">Email
@@ -130,7 +129,8 @@
             document.getElementById("city").innerHTML =
                 rows.map(r => `<option value="${r.city}">${r.city}</option>`).join("");
 
-            note.textContent = `${rows.length} cities · data by Open-Meteo.com`;
+            // Attribution is required by Open-Meteo's CC BY 4.0 licence.
+            note.textContent = "Data by Open-Meteo.com";
         }
 
         async function loadHistory() {
@@ -158,15 +158,34 @@
                 const where = data.station_name
                     ? `${data.station_name} (${data.latitude}, ${data.longitude})`
                     : `Station ${data.station}`;
-                note.textContent =
-                    `${where} · ${rows.length} months · ${first} to ${last} · ` +
-                    `source: NOAA GHCN-Daily via S3`;
+                note.textContent = `${where} · ${first} to ${last}`;
             } catch (e) {
                 note.textContent = `Could not load history: ${e.message}`;
             }
         }
 
         /* ---------- Cognito calls: same endpoint, different X-Amz-Target ---------- */
+        // Cognito returns machine-readable exception types plus long validation
+        // strings. Neither belongs in front of a user, so map the ones we expect and
+        // fall back to something short for the rest.
+        const AUTH_ERRORS = {
+            UsernameExistsException:   "That email is already registered. Try signing in.",
+            InvalidPasswordException:  "Password needs at least 8 characters, including upper case, lower case and a number.",
+            InvalidParameterException: "Please check the details you entered.",
+            CodeMismatchException:     "That code is not correct.",
+            ExpiredCodeException:      "That code has expired. Request a new one.",
+            NotAuthorizedException:    "Incorrect email or password.",
+            UserNotFoundException:     "Incorrect email or password.",
+            UserNotConfirmedException: "Please confirm your email address first.",
+            LimitExceededException:    "Too many attempts. Please wait a moment and try again.",
+            TooManyRequestsException:  "Too many attempts. Please wait a moment and try again."
+        };
+
+        function friendlyError(data, fallback) {
+            const type = (data.__type || "").split("#").pop();
+            return AUTH_ERRORS[type] || fallback;
+        }
+
         async function cognito(action, body) {
             const res = await fetch(`https://cognito-idp.${COGNITO.region}.amazonaws.com/`, {
                 method: "POST",
@@ -182,8 +201,13 @@
 
         async function register() {
             const note = document.getElementById("authNote");
-            const email = document.getElementById("username").value;
+            const email = document.getElementById("username").value.trim();
             const password = document.getElementById("password").value;
+
+            if (!email || !password) {
+                note.textContent = "Enter an email address and a password.";
+                return;
+            }
             note.textContent = "Creating account…";
 
             const { ok, data } = await cognito("SignUp", {
@@ -193,7 +217,7 @@
             });
 
             if (!ok) {
-                note.textContent = `Sign up failed: ${data.message || "unknown error"}`;
+                note.textContent = friendlyError(data, "Could not create the account.");
                 return;
             }
             note.textContent = "";
@@ -204,15 +228,21 @@
 
         async function confirmSignUp() {
             const note = document.getElementById("authNote");
+            const code = document.getElementById("code").value.trim();
+
+            if (!code) {
+                note.textContent = "Enter the code from your email.";
+                return;
+            }
             note.textContent = "Confirming…";
 
             const { ok, data } = await cognito("ConfirmSignUp", {
-                Username: document.getElementById("username").value,
-                ConfirmationCode: document.getElementById("code").value
+                Username: document.getElementById("username").value.trim(),
+                ConfirmationCode: code
             });
 
             if (!ok) {
-                note.textContent = `Confirmation failed: ${data.message || "unknown error"}`;
+                note.textContent = friendlyError(data, "Could not confirm the code.");
                 return;
             }
             document.getElementById("confirmBox").hidden = true;
@@ -224,18 +254,22 @@
         /* ---------- login: talks to Cognito directly ---------- */
         async function login() {
             const note = document.getElementById("authNote");
+            const email = document.getElementById("username").value.trim();
+            const password = document.getElementById("password").value;
+
+            if (!email || !password) {
+                note.textContent = "Enter your email address and password.";
+                return;
+            }
             note.textContent = "Signing in…";
 
             const { ok, data } = await cognito("InitiateAuth", {
                 AuthFlow: "USER_PASSWORD_AUTH",
-                AuthParameters: {
-                    USERNAME: document.getElementById("username").value,
-                    PASSWORD: document.getElementById("password").value
-                }
+                AuthParameters: { USERNAME: email, PASSWORD: password }
             });
 
             if (!ok) {
-                note.textContent = `Login failed: ${data.message || "unknown error"}`;
+                note.textContent = friendlyError(data, "Could not sign in.");
                 return;
             }
 
@@ -298,9 +332,17 @@
             await loadSubs();
         }
 
-        loadCurrent().catch(e => {
-            document.getElementById("currentNote").textContent = `Could not load current conditions: ${e.message}`;
-        });
+        function refreshCurrent() {
+            loadCurrent().catch(e => {
+                document.getElementById("currentNote").textContent =
+                    `Could not load current conditions: ${e.message}`;
+            });
+        }
+
+        refreshCurrent();
+        // The ingestion job runs every 10 minutes; polling every minute picks up new
+        // readings without the user having to reload the page.
+        setInterval(refreshCurrent, 60_000);
         loadHistory().catch(e => {
             document.getElementById("chartNote").textContent = `Could not load history: ${e.message}`;
         });

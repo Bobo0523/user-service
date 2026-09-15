@@ -4,3 +4,29 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ${COGNITO_URI:https://cognito-idp.us-east-1.amazonaws.com/us-east-1_FntgOkEnY}
+app:
+  history-bucket: ${HISTORY_BUCKET:weather-app-data-demo}
+  subscriptions-table: ${SUBSCRIPTIONS_TABLE:weather-subscriptions}
+  current-table: ${CURRENT_TABLE:weather-current}
+  alert-topic-arn: ${ALERT_TOPIC_ARN:}
+
+  cognito:
+    confidential-client-id: ${COGNITO_CONFIDENTIAL_CLIENT_ID:}
+    confidential-client-secret: ${COGNITO_CONFIDENTIAL_CLIENT_SECRET:}
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    org.springframework.security: ${SECURITY_LOG_LEVEL:INFO}
