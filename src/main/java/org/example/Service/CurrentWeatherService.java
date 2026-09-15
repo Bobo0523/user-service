@@ -11,13 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Current conditions, written by the ingestion Lambda.
- *
- * This table also defines which cities the product supports: a city exists
- * for the user exactly when the Lambda is fetching it. Scanning is fine here
- * because the table holds one row per supported city, not per user.
- */
+
 @Service
 public class CurrentWeatherService {
 

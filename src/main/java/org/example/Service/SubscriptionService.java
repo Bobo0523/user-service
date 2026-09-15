@@ -14,13 +14,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Per-user alert preferences.
- *
- * Every method takes the userId that was extracted from the verified JWT, and
- * uses it as the partition key. A user can only ever touch their own rows -
- * the isolation is enforced here in application code, not by IAM.
- */
 @Service
 public class SubscriptionService {
 

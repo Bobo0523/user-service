@@ -5,10 +5,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 
-/**
- * Reads the pre-aggregated history file that the ETL script uploaded.
- * The bucket stays private: only this EC2 instance's IAM role can read it.
- */
+
 @Service
 public class HistoryService {
 
