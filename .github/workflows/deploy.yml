@@ -91,6 +91,8 @@ jobs:
             echo "APP_SUBSCRIPTIONS_TABLE=weather-subscriptions" >> .env
             echo "APP_CURRENT_TABLE=weather-current" >> .env
             echo "APP_ALERT_TOPIC_ARN=arn:aws:sns:us-east-1:543035740737:weather-alerts" >> .env
+            echo "COGNITO_CONFIDENTIAL_CLIENT_ID=${{ vars.COGNITO_CONFIDENTIAL_CLIENT_ID }}" >> .env
+            echo "COGNITO_CONFIDENTIAL_CLIENT_SECRET=${{ secrets.COGNITO_CONFIDENTIAL_CLIENT_SECRET }}" >> .env
             
 
             sudo docker stop user-app || true
